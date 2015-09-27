@@ -1,4 +1,5 @@
-#include "eeArm.h"
+#include "EEArm.h"
+#include "EEArmConfig.h"
 #include "ArduinoJson.h"
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
@@ -9,11 +10,12 @@
 #define _DEBUG   // Enables general logging
 
 /* Set these to your desired credentials. */
-const char *deviceName = "GwaTest Arm";
+config deviceConfig = {};
 
 ESP8266WebServer server(80);
 
-EEArmClass EEArm;
+EEArm eeArm;
+EEArmConfig eeArmConfig;
 
 // --------------------------------------------------------
 // Setup
@@ -27,9 +29,13 @@ void setup() {
 #endif
 
   EEPROM.begin(4096);
-  
+
+  if (!eeArmConfig.getConfig(&deviceConfig)) {
+    Serial.println("eeArmConfig getConfig failed!");
+  }
+
   SetupAP();
-  
+
 #ifdef _DEBUG
   Serial.println("HTTP server starting");
   Serial.println("----------------------------");
@@ -38,7 +44,7 @@ void setup() {
   server.begin();
 
   server.on("/", handleRoot);
-  server.on("/EEArm", handleArm);
+  server.on("/eearm", handleArm);
   server.on("/add", handleAdd);
   server.on("/pop", handlePop);
   server.on("/clear", handleClear);
@@ -52,10 +58,11 @@ void setup() {
   server.on("/stop", handleStop);
   server.on("/gostart", handleGoToStart);
   server.on("/restart", handleRestart);
+  server.on("/settings", handleSettings);
 
 
-  EEArm.begin(13, 12, 14, 16);
-  
+  eeArm.begin(13, 12, 14, 16);
+
   randomSeed(analogRead(0));
 }
 
@@ -72,23 +79,23 @@ void loop() {
     switch (command)
     {
       case 'p':
-        EEArm.play();
+        eeArm.play();
         Serial.println("Play");
         break;
       case 'a':
-        EEArm.addStep({random(50, 120), random(40, 110), random(40, 110), random(10, 60), 0, 0});
+        eeArm.addStep({random(50, 120), random(40, 110), random(40, 110), random(10, 60), 0, 0});
         Serial.println("Added");
         break;
       case 's':
-        EEArm.saveSteps();
+        eeArm.saveSteps();
         Serial.println("Added");
         break;
       case 'c':
-        EEArm.clearSteps();
+        eeArm.clearSteps();
         Serial.println("Cleared");
         break;
       case 'l':
-        EEArm.printSteps();
+        eeArm.printSteps();
         break;
     }
   }
@@ -120,11 +127,11 @@ void handleArm() {
   Serial.println(server.arg("claw"));
 #endif
 
-  EEArm.moveTo({server.arg("base").toInt(),
-              server.arg("body").toInt(),
-              server.arg("neck").toInt(),
-              server.arg("claw").toInt()
-             });
+  eeArm.moveTo({server.arg("base").toInt(),
+                server.arg("body").toInt(),
+                server.arg("neck").toInt(),
+                server.arg("claw").toInt()
+               });
 
   return returnArmDetails(true);
 }
@@ -143,7 +150,7 @@ void handleAdd() {
     server.arg("delay").toInt()
   };
 
-  EEArm.addStep(step);
+  eeArm.addStep(step);
 
   return returnOk("handleAdd");
 }
@@ -152,7 +159,7 @@ void handlePop() {
 #ifdef _DEBUG
   Serial.println("handlePop called: ");
 #endif
-  EEArm.popStep();
+  eeArm.popStep();
   return returnOk("handlePop");
 }
 
@@ -160,7 +167,7 @@ void handleClear() {
 #ifdef _DEBUG
   Serial.println("handleClear called: ");
 #endif
-  EEArm.clearSteps();
+  eeArm.clearSteps();
   return returnOk("handleClear");
 }
 
@@ -176,7 +183,7 @@ void handleLoadSteps() {
 #ifdef _DEBUG
   Serial.println("handleSaveSteps called: ");
 #endif
-  EEArm.loadSteps();
+  eeArm.loadSteps();
   return returnOk("handleSaveSteps");
 }
 
@@ -184,7 +191,7 @@ void handleSaveSteps() {
 #ifdef _DEBUG
   Serial.println("handleSaveSteps called: ");
 #endif
-  EEArm.saveSteps();
+  eeArm.saveSteps();
   return returnOk("handleSaveSteps");
 }
 
@@ -192,7 +199,7 @@ void handleGoToStart() {
 #ifdef _DEBUG
   Serial.println("handleGoToStart called");
 #endif
-  EEArm.goToStart();
+  eeArm.goToStart();
   return returnArmDetails(true);
 }
 
@@ -200,9 +207,9 @@ void handlePlay() {
 #ifdef _DEBUG
   Serial.println("handlePlay called");
 #endif
-  EEArm.play();
+  eeArm.play();
 
-  //   EEArm.play(); returns the position. Wasteful call below
+  //   eeArm.play(); returns the position. Wasteful call below
   return returnArmDetails(true);
 }
 
@@ -211,7 +218,7 @@ void handleLoop() {
   Serial.println("handlePlay called");
 #endif
   int delayBetween = server.arg("delayBetween").toInt();
-  EEArm.loop(delayBetween);
+  eeArm.loop(delayBetween);
   return returnArmDetails(true);
 }
 
@@ -221,7 +228,7 @@ void handlePause() {
 #endif
   // Get delay from args
   int delay = server.arg("delay").toInt();
-  EEArm.pause(delay);
+  eeArm.pause(delay);
   return returnArmDetails(true);
 }
 
@@ -230,7 +237,7 @@ void handleStop() {
   Serial.println("handlePlay called");
 #endif
 
-  EEArm.stop();
+  eeArm.stop();
   return returnArmDetails(true);
 }
 
@@ -247,7 +254,7 @@ void returnArmDetails(bool moved) {
     root["moved"] = true;
   }
 
-  armPosition pos =  EEArm.getPosition();
+  armPosition pos =  eeArm.getPosition();
   root["base"] = pos.base;
   root["body"] = pos.body;
   root["neck"] = pos.neck;
@@ -286,11 +293,71 @@ void handleRestart() {
   ESP.restart();
 }
 
+void handleSettings() {
+#ifdef _DEBUG
+  Serial.print("handleSettings called: ");
+#endif
+
+  if (server.method() == HTTP_POST ) {
+    if (server.args() == 1 &&  bool(server.arg("default")) == true ) {
+      // TODO: Set defaults
+      return returnSettings();
+    }
+
+#ifdef _DEBUG
+    Serial.print(server.arg("base"));
+    Serial.print(", ");
+    Serial.print(server.arg("body"));
+    Serial.print(", ");
+    Serial.print(server.arg("neck"));
+    Serial.print(", ");
+    Serial.println(server.arg("claw"));
+#endif
+
+    deviceConfig.mode = server.arg("mode").toInt();
+    strncpy(deviceConfig.name, server.arg("name").c_str(), 32);
+    strncpy(deviceConfig.ssid, server.arg("ssid").c_str(), 32);
+    strncpy(deviceConfig.pass, server.arg("pass").c_str(), 64);
+    deviceConfig.speed = server.arg("speed").toInt();
+    deviceConfig.incrementDelay = server.arg("incrementDelay").toInt();
+
+    if (!eeArmConfig.saveConfig(&deviceConfig)) {
+      Serial.println("eeArmConfig getConfig failed!");
+    }
+  }
+
+  return returnSettings();
+}
+
 void handleSetIncrementDelay() {
 #ifdef _DEBUG
   Serial.println("handleSetIncrementDelay...");
 #endif
   return returnOk("handleSetIncrementDelay");
+}
+
+
+void returnSettings() {
+#ifdef _DEBUG
+  Serial.println("returnSettings called");
+#endif
+
+  StaticJsonBuffer<300> jsonBuffer;
+
+  JsonObject& root = jsonBuffer.createObject();
+
+  root["mode"] = deviceConfig.mode;
+  root["name"] = deviceConfig.name;
+  root["ssid"] = deviceConfig.ssid;
+  root["pass"] = deviceConfig.pass;
+  root["speed"] = deviceConfig.speed;
+  root["incrementDelay"] = deviceConfig.incrementDelay;
+
+  char resp[300];
+
+  root.printTo(resp, sizeof(resp));
+
+  server.send(200, "application/json", resp);
 }
 
 void handleSetMaxDegrees() {
@@ -313,7 +380,7 @@ void SetupAP() {
 #endif
 
   /* You can remove the password parameter if you want the AP to be open. */
-  WiFi.softAP(deviceName);
+  WiFi.softAP(deviceConfig.name);
 
   IPAddress myIP = WiFi.softAPIP();
   Serial.print("AP IP address: ");

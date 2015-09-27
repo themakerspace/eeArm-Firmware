@@ -5,7 +5,7 @@ by Chris Fraser <http://blog.chrosfraser.co.za>
 https://github.com/themakerspace/eeArm-Firmware
 */
 
-#include "eeArm.h"
+#include "EEArm.h"
 //
 #define _EEARM_DEBUG   // Enables general logging
 #define _MOVEMENT_DEBUG   // Enables logging movement
@@ -14,19 +14,17 @@ https://github.com/themakerspace/eeArm-Firmware
 // ----------------------------------------------------
 // Public
 // ----------------------------------------------------
-armPosition EEArmClass::begin(uint8_t basePin, uint8_t bodyPin, uint8_t neckPin, uint8_t clawPin) {
+armPosition EEArm::begin(uint8_t basePin, uint8_t bodyPin, uint8_t neckPin, uint8_t clawPin) {
   base.attach(basePin);
   body.attach(bodyPin);
   neck.attach(neckPin);
   claw.attach(clawPin);
-  Serial.print("int Size");
-  Serial.println(sizeof(int));
   loadSteps();
 
   return getPosition();
 }
 
-armPosition EEArmClass::getPosition() {
+armPosition EEArm::getPosition() {
   armPosition pos = {
     base.read() + 1,
     body.read() + 1,
@@ -37,28 +35,28 @@ armPosition EEArmClass::getPosition() {
   return pos;
 }
 
-armPosition EEArmClass::moveTo(armPosition position) {
+armPosition EEArm::moveTo(armPosition position) {
   armPosition current = getPosition();
   move(current, position);
   return getPosition();
 }
 
-bool EEArmClass::addStep(armStep step) {
+bool EEArm::addStep(armStep step) {
   _armSteps[_writeIndex++] = step;
 }
 
-bool EEArmClass::popStep() {
+bool EEArm::popStep() {
   _writeIndex--;
 }
 
-bool EEArmClass::clearSteps() {
+bool EEArm::clearSteps() {
   _writeIndex = 0;
 
   EEPROM.put<int>(500, _writeIndex);
   return EEPROM.commit();
 }
 
-armPosition EEArmClass::goToStart() {
+armPosition EEArm::goToStart() {
   armStep step = _armSteps[0];
   armPosition current = getPosition();
   move(current, step.pos);
@@ -66,7 +64,7 @@ armPosition EEArmClass::goToStart() {
   return getPosition();
 }
 
-armPosition EEArmClass::play() {
+armPosition EEArm::play() {
   // previousStep initially set to start position
   armStep previousStep = {getPosition(), 0, 0};
   armStep currentStep;
@@ -83,22 +81,22 @@ armPosition EEArmClass::play() {
 
 }
 
-armPosition EEArmClass::loop(int delayBetween) {
+armPosition EEArm::loop(int delayBetween) {
 
 }
 
-armPosition EEArmClass::pause(int delay) {
+armPosition EEArm::pause(int delay) {
 
 }
 
-armPosition EEArmClass::stop() {
+armPosition EEArm::stop() {
 
 }
 
 // ----------------------------------------------------
 // Private
 // ----------------------------------------------------
-void EEArmClass::move(armPosition previous, armPosition current, int steps) {
+void EEArm::move(armPosition previous, armPosition current, int steps) {
 
   int increments = 1;
 #ifdef _MOVEMENT_DEBUG
@@ -132,7 +130,7 @@ void EEArmClass::move(armPosition previous, armPosition current, int steps) {
   }
 }
 
-void EEArmClass::moveServoIncrement(armPosition previous, armPosition current, int i, int increments) {
+void EEArm::moveServoIncrement(armPosition previous, armPosition current, int i, int increments) {
   int baseNext = interpolate(previous.base, current.base, i, increments);
   int bodyNext = interpolate(previous.body, current.body, i, increments);
   int neckNext = interpolate(previous.neck, current.neck, i, increments);
@@ -156,7 +154,7 @@ void EEArmClass::moveServoIncrement(armPosition previous, armPosition current, i
   claw.write(clawNext);
 }
 
-int EEArmClass::interpolate (int previous, int current, int i, int increments) {
+int EEArm::interpolate (int previous, int current, int i, int increments) {
   int delta = current - previous;
 
   int x = previous + (int)floor(((float)delta / increments) * i);
@@ -165,7 +163,7 @@ int EEArmClass::interpolate (int previous, int current, int i, int increments) {
 
 }
 
-int EEArmClass::getIncrements(armPosition previous, armPosition current) {
+int EEArm::getIncrements(armPosition previous, armPosition current) {
   int maxMovement = abs(current.base  - previous.base);
 
   if (maxMovement < abs(current.body  - previous.body)) {
@@ -189,7 +187,7 @@ int EEArmClass::getIncrements(armPosition previous, armPosition current) {
   return increments;
 }
 
-bool EEArmClass::saveSteps() {
+bool EEArm::saveSteps() {
 #ifdef _EEPROM_DEBUG
   Serial.println("Saving Steps");
   Serial.print("Current _writeIndex: ");
@@ -212,7 +210,7 @@ bool EEArmClass::saveSteps() {
   return EEPROM.commit();
 }
 
-bool EEArmClass::printSteps() {
+bool EEArm::printSteps() {
 #ifdef _EEARM_DEBUG
   Serial.print("Step count: ");
   Serial.println(_writeIndex);
@@ -225,7 +223,7 @@ bool EEArmClass::printSteps() {
   return true;
 }
 
-bool EEArmClass::loadSteps() {
+bool EEArm::loadSteps() {
   EEPROM.get<int>(500, _writeIndex);
 
 #ifdef _EEPROM_DEBUG
@@ -254,7 +252,7 @@ bool EEArmClass::loadSteps() {
   return true;
 }
 
-bool EEArmClass::printStep(armStep *currentStep) {
+bool EEArm::printStep(armStep *currentStep) {
 #ifdef _EEARM_DEBUG
   Serial.print(currentStep->pos.base);
   Serial.print(',');

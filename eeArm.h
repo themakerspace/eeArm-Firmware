@@ -1,4 +1,4 @@
-/* 
+/*
 eeArm
 by Chris Fraser <http://blog.chrosfraser.co.za>
 
@@ -28,7 +28,7 @@ typedef struct {
   int max;
 } calibration;
 
-class EEArmClass {
+class EEArm {
   public:
     armStep _armSteps[50];
     int _writeIndex = 0;
@@ -38,7 +38,7 @@ class EEArmClass {
     bool addStep(armStep step);
     bool popStep();
     bool clearSteps();
-    bool saveSteps();    
+    bool saveSteps();
     bool loadSteps();
     armPosition goToStart();
     armPosition play();
@@ -52,7 +52,7 @@ class EEArmClass {
     Servo body;
     Servo neck;
     Servo claw;
-    calibration _servoLimits[4];  
+    calibration _servoLimits[4];
     int _maxIncrement = 1;
     int _incrementDelay = 10;
     void moveServoIncrement(armPosition previous, armPosition current, int i, int increments);
@@ -61,7 +61,5 @@ class EEArmClass {
     void move(armPosition previous, armPosition current, int steps = 0);
     bool printStep(armStep *currentStep);
 };
-
-extern EEArmClass EEArm;
 
 #endif
