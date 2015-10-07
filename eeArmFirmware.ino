@@ -10,7 +10,7 @@
 #define _DEBUG   // Enables general logging
 
 /* Set these to your desired credentials. */
-config deviceConfig = {};
+wifiConfig deviceConfig = {};
 
 ESP8266WebServer server(80);
 
@@ -23,14 +23,15 @@ EEArmConfig eeArmConfig;
 void setup() {
   Serial.begin(115200);
   delay(1000);
+
 #ifdef _DEBUG
   Serial.println();
-  Serial.println(F("setup......."));
+  Serial.println(F("Setup......."));
 #endif
 
   EEPROM.begin(4096);
 
-  if (!eeArmConfig.getConfig(&deviceConfig)) {
+  if (!eeArmConfig.getWifiConfig(&deviceConfig)) {
     Serial.println("eeArmConfig getConfig failed!");
   }
 
@@ -44,24 +45,23 @@ void setup() {
   server.begin();
 
   server.on("/", handleRoot);
-  server.on("/eearm", handleArm);
+  server.on("/arm", handleArm);
   server.on("/add", handleAdd);
   server.on("/pop", handlePop);
   server.on("/clear", handleClear);
-  server.on("/getSteps", handleGetSteps);
-  server.on("/loadSteps", handleLoadSteps);
-  server.on("/saveSteps", handleSaveSteps);
+  server.on("/getsteps", handleGetSteps);
+  server.on("/loadsteps", handleLoadSteps);
+  server.on("/savesteps", handleSaveSteps);
   server.on("/loop", handleLoop);
-  server.on("/go", handlePlay);
   server.on("/play", handlePlay);
   server.on("/pause", handlePause);
   server.on("/stop", handleStop);
   server.on("/gostart", handleGoToStart);
   server.on("/restart", handleRestart);
   server.on("/settings", handleSettings);
+  server.on("/armsettings", handleArmSettings);
 
-
-  eeArm.begin(13, 12, 14, 16);
+  eeArm.begin();
 
   randomSeed(analogRead(0));
 }
@@ -83,7 +83,7 @@ void loop() {
         Serial.println("Play");
         break;
       case 'a':
-        eeArm.addStep({random(50, 120), random(40, 110), random(40, 110), random(10, 60), 0, 0});
+        eeArm.addStep({random(0, 180), random(0, 180), random(0, 180), random(0, 180), 0, 0});
         Serial.println("Added");
         break;
       case 's':
@@ -95,6 +95,7 @@ void loop() {
         Serial.println("Cleared");
         break;
       case 'l':
+        Serial.println("Printing steps");
         eeArm.printSteps();
         break;
     }
@@ -126,12 +127,12 @@ void handleArm() {
   Serial.print(", ");
   Serial.println(server.arg("claw"));
 #endif
-
-  eeArm.moveTo({server.arg("base").toInt(),
-                server.arg("body").toInt(),
-                server.arg("neck").toInt(),
-                server.arg("claw").toInt()
-               });
+  armPosition pos = {server.arg("base").toInt(),
+                     server.arg("body").toInt(),
+                     server.arg("neck").toInt(),
+                     server.arg("claw").toInt()
+                    };
+  eeArm.moveTo(&pos);
 
   return returnArmDetails(true);
 }
@@ -304,36 +305,18 @@ void handleSettings() {
       return returnSettings();
     }
 
-#ifdef _DEBUG
-    Serial.print(server.arg("base"));
-    Serial.print(", ");
-    Serial.print(server.arg("body"));
-    Serial.print(", ");
-    Serial.print(server.arg("neck"));
-    Serial.print(", ");
-    Serial.println(server.arg("claw"));
-#endif
-
     deviceConfig.mode = server.arg("mode").toInt();
     strncpy(deviceConfig.name, server.arg("name").c_str(), 32);
     strncpy(deviceConfig.ssid, server.arg("ssid").c_str(), 32);
     strncpy(deviceConfig.pass, server.arg("pass").c_str(), 64);
-    deviceConfig.speed = server.arg("speed").toInt();
-    deviceConfig.incrementDelay = server.arg("incrementDelay").toInt();
-
-    if (!eeArmConfig.saveConfig(&deviceConfig)) {
+    eeArm.detach();
+    if (!eeArmConfig.saveWifiConfig(&deviceConfig)) {
       Serial.println("eeArmConfig getConfig failed!");
     }
+    eeArm.attach();
   }
 
   return returnSettings();
-}
-
-void handleSetIncrementDelay() {
-#ifdef _DEBUG
-  Serial.println("handleSetIncrementDelay...");
-#endif
-  return returnOk("handleSetIncrementDelay");
 }
 
 
@@ -350,8 +333,6 @@ void returnSettings() {
   root["name"] = deviceConfig.name;
   root["ssid"] = deviceConfig.ssid;
   root["pass"] = deviceConfig.pass;
-  root["speed"] = deviceConfig.speed;
-  root["incrementDelay"] = deviceConfig.incrementDelay;
 
   char resp[300];
 
@@ -360,11 +341,70 @@ void returnSettings() {
   server.send(200, "application/json", resp);
 }
 
-void handleSetMaxDegrees() {
+void handleArmSettings() {
 #ifdef _DEBUG
-  Serial.println("handleSetMaxDegrees...");
+  Serial.print("handleSettings called: ");
 #endif
-  return returnOk("handleSetMaxDegrees");
+
+  if (server.method() == HTTP_POST ) {
+    if (server.args() == 1 &&  bool(server.arg("default")) == true ) {
+      // TODO: Set defaults
+      return returnSettings();
+    }
+
+    eeArm.config.speed = server.arg("speed").toInt();
+    eeArm.config.incrementDelay = server.arg("incdel").toInt();
+    eeArm.config.baseCal = {server.arg("ba_min").toInt(), server.arg("ba_max").toInt(), server.arg("ba_strt").toInt()};
+    eeArm.config.bodyCal = {server.arg("bo_min").toInt(), server.arg("bo_max").toInt(), server.arg("bo_strt").toInt()};
+    eeArm.config.neckCal = {server.arg("n_min").toInt(), server.arg("n_max").toInt(), server.arg("n_strt").toInt()};
+    eeArm.config.clawCal = {server.arg("c_min").toInt(), server.arg("c_max").toInt(), server.arg("c_strt").toInt()};
+    eeArm.detach();
+    if (!eeArmConfig.saveArmConfig(&eeArm.config)) {
+      Serial.println("eeArmConfig getConfig failed!");
+    }
+    eeArm.attach();
+  }
+
+  return returnArmSettings();
+}
+
+void returnArmSettings() {
+#ifdef _DEBUG
+  Serial.println("returnSettings called");
+#endif
+
+  StaticJsonBuffer<800> jsonBuffer;
+
+  JsonObject& root = jsonBuffer.createObject();
+
+  root["speed"] = eeArm.config.speed;
+  root["incrementDelay"] = eeArm.config.incrementDelay;
+
+  JsonObject& base = root.createNestedObject("base");
+  base["min"] = eeArm.config.baseCal.min;
+  base["max"] = eeArm.config.baseCal.max;
+  base["start"] = eeArm.config.baseCal.start;
+
+  JsonObject& body = root.createNestedObject("body");
+  body["min"] = eeArm.config.bodyCal.min;
+  body["max"] = eeArm.config.bodyCal.max;
+  body["start"] = eeArm.config.bodyCal.start;
+
+  JsonObject& neck = root.createNestedObject("neck");
+  neck["min"] = eeArm.config.neckCal.min;
+  neck["max"] = eeArm.config.neckCal.max;
+  neck["start"] = eeArm.config.neckCal.start;
+
+  JsonObject& claw = root.createNestedObject("claw");
+  claw["min"] = eeArm.config.clawCal.min;
+  claw["max"] = eeArm.config.clawCal.max;
+  claw["start"] = eeArm.config.clawCal.start;
+
+  char resp[800];
+
+  root.printTo(resp, sizeof(resp));
+
+  server.send(200, "application/json", resp);
 }
 
 void returnOk(String response) {
@@ -378,12 +418,72 @@ void SetupAP() {
 #ifdef _DEBUG
   Serial.println("Configuring access point...");
 #endif
+  pinMode(5, INPUT_PULLUP);
 
-  /* You can remove the password parameter if you want the AP to be open. */
-  WiFi.softAP(deviceConfig.name);
+  if (deviceConfig.mode == 1 && digitalRead(5) != 0) {
+    // Set Hostname.
+    WiFi.hostname(deviceConfig.name);
 
-  IPAddress myIP = WiFi.softAPIP();
-  Serial.print("AP IP address: ");
-  Serial.println(myIP);
+    // Print hostname.
+    Serial.print("hostname: ");
+    Serial.println(WiFi.hostname());
+
+    // Check WiFi connection
+    // ... check mode
+    if (WiFi.getMode() != WIFI_STA)
+    {
+      WiFi.mode(WIFI_STA);
+      delay(10);
+    }
+
+    // ... Compare file config with sdk config.
+    if (WiFi.SSID() != deviceConfig.ssid || WiFi.psk() !=  deviceConfig.pass )
+    {
+      Serial.println("WiFi config changed.");
+
+      // ... Try to connect to WiFi station.
+      WiFi.begin(deviceConfig.ssid, deviceConfig.pass);
+
+      // ... Pritn new SSID
+      Serial.print("new SSID: ");
+      Serial.println(WiFi.SSID());
+    }
+    else
+    {
+      // ... Begin with sdk config.
+      WiFi.begin();
+    }
+
+    Serial.println("Wait for WiFi connection.");
+
+    // ... Give ESP 10 seconds to connect to station.
+    unsigned long startTime = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startTime < 10000)
+    {
+      Serial.write('.');
+      //Serial.print(WiFi.status());
+      delay(500);
+    }
+
+#ifdef _DEBUG
+    WiFi.printDiag(Serial);
+#endif
+  }
+
+  // If not connected start the soft ap
+  if (WiFi.status() != WL_CONNECTED) {
+    // Setup AP
+    WiFi.softAP(deviceConfig.name);
+
+    IPAddress myIP = WiFi.softAPIP();
+    Serial.print("AP IP address: ");
+    Serial.println(myIP);
+  }
+
+  // Initialize mDNS service.
+  MDNS.begin(deviceConfig.name);
+
+  // Add MDNS service.
+  MDNS.addService("http", "tcp", 80);
 }
 

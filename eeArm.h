@@ -9,6 +9,7 @@ https://github.com/themakerspace/eeArm-Firmware
 
 #include <Servo.h>
 #include <EEPROM.h>
+#include "EEArmConfig.h"
 
 typedef struct {
   int base;
@@ -23,26 +24,22 @@ typedef struct {
   int delay;
 } armStep;
 
-typedef struct {
-  int min;
-  int max;
-} calibration;
-
 class EEArm {
   public:
-    armStep _armSteps[50];
-    int _writeIndex = 0;
-    armPosition begin(uint8_t basePin, uint8_t bodyPin, uint8_t neckPin, uint8_t clawPin);
+    armConfig config;
+    armPosition begin(uint8_t basePin = 13, uint8_t bodyPin = 12, uint8_t neckPin = 14, uint8_t clawPin = 16);
+    void detach();
+    armPosition attach(uint8_t basePin = 13, uint8_t bodyPin = 12, uint8_t neckPin = 14, uint8_t clawPin = 16);
     armPosition getPosition();
-    armPosition moveTo(armPosition position);
-    bool addStep(armStep step);
-    bool popStep();
+    armPosition moveTo(armPosition* position);
+    int addStep(armStep step);
+    int popStep();
     bool clearSteps();
     bool saveSteps();
     bool loadSteps();
     armPosition goToStart();
-    armPosition play();
-    armPosition loop(int delayBetween);
+    bool play();
+    bool loop(int delayBetween);
     armPosition pause(int delay);
     armPosition stop();
     bool printSteps();
@@ -52,13 +49,12 @@ class EEArm {
     Servo body;
     Servo neck;
     Servo claw;
-    calibration _servoLimits[4];
-    int _maxIncrement = 1;
-    int _incrementDelay = 10;
-    void moveServoIncrement(armPosition previous, armPosition current, int i, int increments);
+    armStep _armSteps[50];
+    int _writeIndex = 0;
+    void moveServoIncrement(armPosition* previous, armPosition* current, int i, int increments);
     int interpolate (int previous, int current, int i, int increments);
-    int getIncrements(armPosition previous, armPosition current);
-    void move(armPosition previous, armPosition current, int steps = 0);
+    int getIncrements(armPosition* previous, armPosition* current);
+    void move(armPosition *previous, armPosition *current, int steps = 0);
     bool printStep(armStep *currentStep);
 };
 

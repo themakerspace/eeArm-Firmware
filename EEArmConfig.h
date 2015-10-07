@@ -15,14 +15,29 @@ typedef struct {
   char name[32];
   char ssid[32];
   char pass[64];
+} wifiConfig;
+
+typedef struct {
+  int min;
+  int max;
+  int start;
+} calibration;
+
+typedef struct {
   int speed;
   int incrementDelay;
-} config;
+  calibration baseCal;
+  calibration bodyCal;
+  calibration neckCal;
+  calibration clawCal;
+} armConfig;
 
 class EEArmConfig {
   public:
-    bool getConfig(config *conf);
-    bool saveConfig(config *conf);
+    bool getWifiConfig(wifiConfig *conf);
+    bool saveWifiConfig(wifiConfig *conf);
+    bool getArmConfig(armConfig *conf);
+    bool saveArmConfig(armConfig *conf);
 };
 
 #endif
