@@ -28,8 +28,11 @@ class EEArm {
   public:
     armConfig config;
     armPosition begin(uint8_t basePin = 13, uint8_t bodyPin = 12, uint8_t neckPin = 14, uint8_t clawPin = 16);
+    
     void detach();
     armPosition attach(uint8_t basePin = 13, uint8_t bodyPin = 12, uint8_t neckPin = 14, uint8_t clawPin = 16);
+    
+    armPosition getServoPosition();
     armPosition getPosition();
     armPosition moveTo(armPosition* position);
     int addStep(armStep step);

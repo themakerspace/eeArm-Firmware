@@ -16,6 +16,7 @@ ESP8266WebServer server(80);
 
 EEArm eeArm;
 EEArmConfig eeArmConfig;
+bool play = false;
 
 // --------------------------------------------------------
 // Setup
@@ -61,7 +62,7 @@ void setup() {
   server.on("/settings", handleSettings);
   server.on("/armsettings", handleArmSettings);
 
-  eeArm.begin();
+  eeArm.begin(D1,D2,D3,D4);
 
   randomSeed(analogRead(0));
 }
@@ -72,6 +73,10 @@ void setup() {
 void loop() {
   server.handleClient();
 
+  if(play){
+    eeArm.play();
+    play = false;
+  }
   if (Serial.available())
   {
     char command = Serial.read();
@@ -88,7 +93,7 @@ void loop() {
         break;
       case 's':
         eeArm.saveSteps();
-        Serial.println("Added");
+        Serial.println("Saved");
         break;
       case 'c':
         eeArm.clearSteps();
@@ -132,6 +137,7 @@ void handleArm() {
                      server.arg("neck").toInt(),
                      server.arg("claw").toInt()
                     };
+                    
   eeArm.moveTo(&pos);
 
   return returnArmDetails(true);
@@ -208,10 +214,10 @@ void handlePlay() {
 #ifdef _DEBUG
   Serial.println("handlePlay called");
 #endif
-  eeArm.play();
 
-  //   eeArm.play(); returns the position. Wasteful call below
-  return returnArmDetails(true);
+  play = true;
+  
+  return returnOk("played");
 }
 
 void handleLoop() {
@@ -419,14 +425,14 @@ void SetupAP() {
   Serial.println("Configuring access point...");
 #endif
   pinMode(5, INPUT_PULLUP);
+  // Set Hostname.
+  WiFi.hostname(deviceConfig.name);
+
+  // Print hostname.
+  Serial.print("hostname: ");
+  Serial.println(WiFi.hostname());
 
   if (deviceConfig.mode == 1 && digitalRead(5) != 0) {
-    // Set Hostname.
-    WiFi.hostname(deviceConfig.name);
-
-    // Print hostname.
-    Serial.print("hostname: ");
-    Serial.println(WiFi.hostname());
 
     // Check WiFi connection
     // ... check mode
@@ -464,22 +470,21 @@ void SetupAP() {
       //Serial.print(WiFi.status());
       delay(500);
     }
-
-#ifdef _DEBUG
-    WiFi.printDiag(Serial);
-#endif
   }
 
   // If not connected start the soft ap
   if (WiFi.status() != WL_CONNECTED) {
-    // Setup AP
-    WiFi.softAP(deviceConfig.name);
 
+    Serial.print("Startup AP Mode: ");
+    Serial.println(deviceConfig.name);
+    // Setup AP
+    WiFi.softAP(deviceConfig.name, "aaaabbbb");
+    delay(50);
     IPAddress myIP = WiFi.softAPIP();
     Serial.print("AP IP address: ");
     Serial.println(myIP);
   }
-
+  
   // Initialize mDNS service.
   MDNS.begin(deviceConfig.name);
 

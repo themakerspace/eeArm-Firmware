@@ -19,6 +19,19 @@ https://github.com/themakerspace/eeArm-Firmware
 // begin
 // ---------------------------
 armPosition EEArm::begin(uint8_t basePin, uint8_t bodyPin, uint8_t neckPin, uint8_t clawPin) {
+
+  EEArmConfig conf;
+  if (!conf.getArmConfig(&config)) {
+    Serial.println("eeArmConfig getArmConfig failed!");
+  }
+
+  // Set the start positions of the servos
+  base.write(config.baseCal.start);
+  body.write(config.bodyCal.start);
+  neck.write(config.neckCal.start);
+  claw.write(config.clawCal.start);
+
+  // Attach the servos
   base.attach(basePin);
   body.attach(bodyPin);
   neck.attach(neckPin);
@@ -29,6 +42,7 @@ armPosition EEArm::begin(uint8_t basePin, uint8_t bodyPin, uint8_t neckPin, uint
 
   return getPosition();
 }
+
 // ---------------------------
 // detach
 // ---------------------------
@@ -38,6 +52,7 @@ void EEArm::detach() {
   neck.detach();
   claw.detach();
 }
+
 // ---------------------------
 // attach
 // ---------------------------
@@ -46,50 +61,59 @@ armPosition EEArm::attach(uint8_t basePin, uint8_t bodyPin, uint8_t neckPin, uin
   body.attach(bodyPin);
   neck.attach(neckPin);
   claw.attach(clawPin);
-  
+
   return getPosition();
 }
 
 // ---------------------------
 // getPosition
 // ---------------------------
-armPosition EEArm::getPosition() {
-  armPosition pos = {
-    base.read() + 1,
-    body.read() + 1,
-    neck.read() + 1,
-    claw.read() + 1
+armPosition EEArm::getServoPosition() {
+  return {
+    base.readMicroseconds(),
+    body.readMicroseconds(),
+    neck.readMicroseconds(),
+    claw.readMicroseconds()
   };
+}
 
-  return pos;
+armPosition EEArm::getPosition() {
+  armPosition currentPosition = getServoPosition();
+
+  return {
+    map(currentPosition.base, config.baseCal.min, config.baseCal.max, config.controlMin, config.controlMax),
+    map(currentPosition.body, config.bodyCal.min, config.bodyCal.max, config.controlMin, config.controlMax),
+    map(currentPosition.neck, config.neckCal.min, config.neckCal.max, config.controlMin, config.controlMax),
+    map(currentPosition.claw, config.clawCal.min, config.clawCal.max, config.controlMin, config.controlMax)
+  };
 }
 
 // ---------------------------
 // moveTo
 // ---------------------------
 armPosition EEArm::moveTo(armPosition *pos) {
-  // Calibration mapping
-  pos->base = map(pos->base, 0, 180 ,config.baseCal.min, config.baseCal.max);
-  pos->body = map(pos->body, 0, 180 ,config.bodyCal.min, config.bodyCal.max);
-  pos->neck = map(pos->neck, 0, 180 ,config.neckCal.min, config.neckCal.max);
-  pos->claw = map(pos->claw, 0, 180 ,config.clawCal.min, config.clawCal.max);
-  
-  armPosition current = getPosition();
+  // Calibration mapping to microseconds
+  pos->base = map(pos->base, config.controlMin, config.controlMax , config.baseCal.min, config.baseCal.max);
+  pos->body = map(pos->body, config.controlMin, config.controlMax , config.bodyCal.min, config.bodyCal.max);
+  pos->neck = map(pos->neck, config.controlMin, config.controlMax , config.neckCal.min, config.neckCal.max);
+  pos->claw = map(pos->claw, config.controlMin, config.controlMax , config.clawCal.min, config.clawCal.max);
+
+  armPosition current = getServoPosition();
   move(&current, pos);
+  
   return getPosition();
 }
-
 
 // ---------------------------
 // addStep: Adds a step and returns the number of steps saved
 // ---------------------------
 int EEArm::addStep(armStep step) {
   // Calibration mapping
-  step.pos.base = map(step.pos.base, 0, 180 ,config.baseCal.min, config.baseCal.max);
-  step.pos.body = map(step.pos.body, 0, 180 ,config.bodyCal.min, config.bodyCal.max);
-  step.pos.neck = map(step.pos.neck, 0, 180 ,config.neckCal.min, config.neckCal.max);
-  step.pos.claw = map(step.pos.claw, 0, 180 ,config.clawCal.min, config.clawCal.max);
-  
+  step.pos.base = map(step.pos.base, config.controlMin, config.controlMax , config.baseCal.min, config.baseCal.max);
+  step.pos.body = map(step.pos.body, config.controlMin, config.controlMax , config.bodyCal.min, config.bodyCal.max);
+  step.pos.neck = map(step.pos.neck, config.controlMin, config.controlMax , config.neckCal.min, config.neckCal.max);
+  step.pos.claw = map(step.pos.claw, config.controlMin, config.controlMax , config.clawCal.min, config.clawCal.max);
+
   _armSteps[_writeIndex++] = step;
   return _writeIndex;
 }
@@ -187,7 +211,8 @@ bool EEArm::loadSteps() {
 // ---------------------------
 armPosition EEArm::goToStart() {
   armStep step = _armSteps[0];
-  armPosition current = getPosition();
+  armPosition current = getServoPosition();
+  
   move(&current, &step.pos);
 
   return getPosition();
@@ -202,12 +227,12 @@ bool EEArm::play() {
   Serial.println(_writeIndex);
 #endif
   // Bail if there are no steps
-  if(_writeIndex == 0){
+  if (_writeIndex == 0) {
     Serial.println("No steps to print");
     return false;
   }
   // previousStep initially set to start position
-  armStep previousStep = {getPosition(), 0, 0};
+  armStep previousStep = {getServoPosition(), 0, 0};
   armStep currentStep;
 
   // Loop through steps
@@ -218,7 +243,7 @@ bool EEArm::play() {
 
     delay(currentStep.delay);
     previousStep = currentStep;
-  } 
+  }
 
   return true;
 }
@@ -302,10 +327,10 @@ void EEArm::moveServoIncrement(armPosition *previous, armPosition *current, int 
   Serial.println();
 #endif
 
-  base.write(baseNext);
-  body.write(bodyNext);
-  neck.write(neckNext);
-  claw.write(clawNext);
+  base.writeMicroseconds(baseNext);
+  body.writeMicroseconds(bodyNext);
+  neck.writeMicroseconds(neckNext);
+  claw.writeMicroseconds(clawNext);
 }
 
 int EEArm::interpolate (int previous, int current, int i, int increments) {

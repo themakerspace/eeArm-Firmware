@@ -11,6 +11,7 @@ https://github.com/themakerspace/eeArm-Firmware
 #include <EEPROM.h>
 
 typedef struct {
+  int version;
   uint8_t mode; // AP - 0, STA - 1
   char name[32];
   char ssid[32];
@@ -24,12 +25,15 @@ typedef struct {
 } calibration;
 
 typedef struct {
+  int version;
   int speed;
   int incrementDelay;
   calibration baseCal;
   calibration bodyCal;
   calibration neckCal;
   calibration clawCal;
+  int controlMin;
+  int controlMax;
 } armConfig;
 
 class EEArmConfig {
@@ -38,6 +42,8 @@ class EEArmConfig {
     bool saveWifiConfig(wifiConfig *conf);
     bool getArmConfig(armConfig *conf);
     bool saveArmConfig(armConfig *conf);
+ private:
+    int _version = 102;
 };
 
 #endif
