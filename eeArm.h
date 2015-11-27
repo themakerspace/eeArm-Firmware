@@ -1,9 +1,11 @@
 /*
 eeArm
 by Chris Fraser <http://blog.chrosfraser.co.za>
+visit http://eearm.com for more info
 
 https://github.com/themakerspace/eeArm-Firmware
 */
+
 #ifndef EEARM_h
 #define EEARM_h
 
@@ -26,7 +28,7 @@ typedef struct {
 
 class EEArm {
   public:
-    armConfig config;
+    ArmConfig config;
     armPosition begin(uint8_t basePin = 13, uint8_t bodyPin = 12, uint8_t neckPin = 14, uint8_t clawPin = 16);
     
     void detach();

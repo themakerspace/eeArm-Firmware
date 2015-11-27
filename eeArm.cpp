@@ -1,6 +1,7 @@
 /*
 eeArm
 by Chris Fraser <http://blog.chrosfraser.co.za>
+visit http://eearm.com for more info
 
 https://github.com/themakerspace/eeArm-Firmware
 */

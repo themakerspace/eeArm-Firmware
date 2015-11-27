@@ -1,3 +1,11 @@
+/*
+eeArm
+by Chris Fraser <http://blog.chrosfraser.co.za>
+visit http://eearm.com for more info
+
+https://github.com/themakerspace/eeArm-Firmware
+*/
+
 #include "EEArm.h"
 #include "EEArmConfig.h"
 #include "ArduinoJson.h"
@@ -10,7 +18,7 @@
 #define _DEBUG   // Enables general logging
 
 /* Set these to your desired credentials. */
-wifiConfig deviceConfig = {};
+WifiConfig deviceConfig = {};
 
 ESP8266WebServer server(80);
 
@@ -60,9 +68,12 @@ void setup() {
   server.on("/gostart", handleGoToStart);
   server.on("/restart", handleRestart);
   server.on("/settings", handleSettings);
-  server.on("/armsettings", handleArmSettings);
+  server.on("/setdefaultcalibration", handleSetDefaultCalibration);
+  server.on("/armcalibration", handleArmCalibration);
+  server.on("/armstartposition", handleArmStartPosition);
 
-  eeArm.begin(D1,D2,D3,D4);
+  //eeArm.begin(D1,D2,D3,D4);
+  eeArm.begin();
 
   randomSeed(analogRead(0));
 }
@@ -73,7 +84,7 @@ void setup() {
 void loop() {
   server.handleClient();
 
-  if(play){
+  if (play) {
     eeArm.play();
     play = false;
   }
@@ -137,7 +148,7 @@ void handleArm() {
                      server.arg("neck").toInt(),
                      server.arg("claw").toInt()
                     };
-                    
+
   eeArm.moveTo(&pos);
 
   return returnArmDetails(true);
@@ -216,7 +227,7 @@ void handlePlay() {
 #endif
 
   play = true;
-  
+
   return returnOk("played");
 }
 
@@ -304,25 +315,28 @@ void handleSettings() {
 #ifdef _DEBUG
   Serial.print("handleSettings called: ");
 #endif
-
+  bool restart = false;
   if (server.method() == HTTP_POST ) {
-    if (server.args() == 1 &&  bool(server.arg("default")) == true ) {
-      // TODO: Set defaults
-      return returnSettings();
-    }
+    if (server.args() > 1) {
+      deviceConfig.mode = server.arg("mode").toInt();
+      strncpy(deviceConfig.name, server.arg("name").c_str(), 32);
+      strncpy(deviceConfig.ssid, server.arg("ssid").c_str(), 32);
+      strncpy(deviceConfig.pass, server.arg("pass").c_str(), 64);
 
-    deviceConfig.mode = server.arg("mode").toInt();
-    strncpy(deviceConfig.name, server.arg("name").c_str(), 32);
-    strncpy(deviceConfig.ssid, server.arg("ssid").c_str(), 32);
-    strncpy(deviceConfig.pass, server.arg("pass").c_str(), 64);
-    eeArm.detach();
-    if (!eeArmConfig.saveWifiConfig(&deviceConfig)) {
-      Serial.println("eeArmConfig getConfig failed!");
+      if (!eeArmConfig.saveWifiConfig(&deviceConfig)) {
+        Serial.println("eeArmConfig getConfig failed!");
+      }
+      restart = true;
     }
-    eeArm.attach();
   }
 
-  return returnSettings();
+  returnSettings();
+
+  if (restart) {
+    WiFi.disconnect();
+    WiFi.mode(WIFI_OFF);
+    ESP.restart();
+  }
 }
 
 
@@ -338,7 +352,6 @@ void returnSettings() {
   root["mode"] = deviceConfig.mode;
   root["name"] = deviceConfig.name;
   root["ssid"] = deviceConfig.ssid;
-  root["pass"] = deviceConfig.pass;
 
   char resp[300];
 
@@ -347,23 +360,74 @@ void returnSettings() {
   server.send(200, "application/json", resp);
 }
 
-void handleArmSettings() {
+void handleSetDefaultCalibration() {
 #ifdef _DEBUG
-  Serial.print("handleSettings called: ");
+  Serial.print("handleSetDefaultCalibration called: ");
 #endif
 
-  if (server.method() == HTTP_POST ) {
-    if (server.args() == 1 &&  bool(server.arg("default")) == true ) {
+  eeArmConfig.setDefaultCalibration(&eeArm.config);
+
+  return returnArmSettings();
+}
+
+void handleArmCalibration() {
+#ifdef _DEBUG
+  Serial.print("handleArmCalibration called: ");
+#endif
+
+  if (server.method() == HTTP_POST) {
+    if (server.args() == 1 && bool(server.arg("default")) == true) {
       // TODO: Set defaults
-      return returnSettings();
+      return returnArmSettings();
     }
 
-    eeArm.config.speed = server.arg("speed").toInt();
-    eeArm.config.incrementDelay = server.arg("incdel").toInt();
-    eeArm.config.baseCal = {server.arg("ba_min").toInt(), server.arg("ba_max").toInt(), server.arg("ba_strt").toInt()};
-    eeArm.config.bodyCal = {server.arg("bo_min").toInt(), server.arg("bo_max").toInt(), server.arg("bo_strt").toInt()};
-    eeArm.config.neckCal = {server.arg("n_min").toInt(), server.arg("n_max").toInt(), server.arg("n_strt").toInt()};
-    eeArm.config.clawCal = {server.arg("c_min").toInt(), server.arg("c_max").toInt(), server.arg("c_strt").toInt()};
+    eeArm.config.baseCal = {
+      mapToMillis(server.arg("ba_min").toInt()),
+      mapToMillis(server.arg("ba_max").toInt()),
+      eeArm.config.baseCal.start
+    };
+    eeArm.config.bodyCal = {
+      mapToMillis(server.arg("bo_min").toInt()),
+      mapToMillis(server.arg("bo_max").toInt()),
+      eeArm.config.bodyCal.start
+    };
+    eeArm.config.neckCal = {
+      mapToMillis(server.arg("n_min").toInt()),
+      mapToMillis(server.arg("n_max").toInt()),
+      eeArm.config.neckCal.start
+    };
+    eeArm.config.clawCal = {
+      mapToMillis(server.arg("c_min").toInt()),
+      mapToMillis(server.arg("c_max").toInt()),
+      eeArm.config.clawCal.start
+    };
+
+    eeArm.detach();
+    if (!eeArmConfig.saveArmConfig(&eeArm.config)) {
+      Serial.println("eeArmConfig getConfig failed!");
+    }
+    eeArm.attach();
+  }
+
+  return returnArmSettings();
+}
+
+
+void handleArmStartPosition() {
+#ifdef _DEBUG
+  Serial.print("handleArmStartPosition called: ");
+#endif
+
+  if (server.method() == HTTP_POST) {
+    if (server.args() <= 1) {
+      return returnArmSettings();
+    }
+
+    eeArm.config.baseCal.start = mapToMillis(server.arg("ba_start").toInt());
+    eeArm.config.bodyCal.start = mapToMillis(server.arg("bo_start").toInt());
+    eeArm.config.neckCal.start = mapToMillis(server.arg("n_start").toInt());
+    eeArm.config.clawCal.start = mapToMillis(server.arg("c_start").toInt());
+
     eeArm.detach();
     if (!eeArmConfig.saveArmConfig(&eeArm.config)) {
       Serial.println("eeArmConfig getConfig failed!");
@@ -427,6 +491,7 @@ void SetupAP() {
   pinMode(5, INPUT_PULLUP);
   // Set Hostname.
   WiFi.hostname(deviceConfig.name);
+  delay(50);
 
   // Print hostname.
   Serial.print("hostname: ");
@@ -470,6 +535,7 @@ void SetupAP() {
       //Serial.print(WiFi.status());
       delay(500);
     }
+    Serial.println();
   }
 
   // If not connected start the soft ap
@@ -477,18 +543,26 @@ void SetupAP() {
 
     Serial.print("Startup AP Mode: ");
     Serial.println(deviceConfig.name);
+    WiFi.mode(WIFI_AP);
+    delay(10);
+
     // Setup AP
     WiFi.softAP(deviceConfig.name, "aaaabbbb");
     delay(50);
+
     IPAddress myIP = WiFi.softAPIP();
     Serial.print("AP IP address: ");
     Serial.println(myIP);
   }
-  
+
   // Initialize mDNS service.
   MDNS.begin(deviceConfig.name);
 
   // Add MDNS service.
   MDNS.addService("http", "tcp", 80);
+}
+
+int mapToMillis(int deg) {
+  return map(deg, 0, 180, 600, 2400);
 }
 
